@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Laboratorio virtual v6 · del río a la casa</title>
+<title>Laboratorio virtual v7 · del río a la casa</title>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#eef1f5;--card:#fff;--tx:#1b2430;--mu:#5d6b7c;--bd:#d9dee5;--ac:#0b6bcb;--ac2:#d9480f;--ok:#2b8a3e;--w:#1c7ed6}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1117;--card:#161c24;--tx:#e6ebf1;--mu:#93a1b3;--bd:#2b3644;--ac:#5aa9ff;--ac2:#ff8f5a;--ok:#69db7c;--w:#4dabf7}}
@@ -29,7 +29,7 @@ svg text{fill:var(--tx);font-family:inherit}.mu{fill:var(--mu)!important}
 
 .family-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}.family-grid label{display:block;color:var(--mu);font-size:12px}.family-grid select,.instrument-head select{width:100%;padding:8px;border:1px solid var(--bd);border-radius:7px;background:var(--bg);color:var(--tx);font:inherit;margin-top:5px}.instrument-card{border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--card)}.instrument-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.instrument-head select{max-width:270px}.instrument-screen{background:#07131b;color:#c7f9e9;border-radius:8px;padding:10px;margin-top:10px;overflow:hidden}.instrument-screen svg{width:100%;height:auto;display:block}.instrument-screen text{fill:#c7f9e9}.instrument-readings{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:9px}.instrument-readings div{background:var(--bg);border:1px solid var(--bd);border-radius:7px;padding:8px}.instrument-readings b{display:block;font-size:17px;color:var(--ac)}.instrument-readings small{color:var(--mu)}.selector-note{font-size:12px;color:var(--mu);margin:8px 0 0}.instrument-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.instrument-tabs button{border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--tx);padding:6px 9px;cursor:pointer}.instrument-tabs button.active{border-color:var(--ac);color:var(--ac);font-weight:700}.scope-grid{stroke:#31505d;stroke-width:1}.scope-wave{fill:none;stroke:#58e0b4;stroke-width:2}.scope-wave.b{stroke:#f4b860}.scope-wave.c{stroke:#73a9ff}.instrument-screen .dim{fill:#8ba6b0}.family-note{border-left:3px solid var(--ac);padding:8px 10px;background:var(--bg);margin-top:8px;font-size:12px}
 </style></head><body>
-<header><h1>⚡ Laboratorio virtual v6 · del río a la casa</h1><nav id="nav"></nav></header>
+<header><h1>⚡ Laboratorio virtual v7 · del río a la casa</h1><nav id="nav"></nav></header>
 <main><aside id="ctl"></aside><section id="view"></section></main>
 <script>
 const P={Q:["Caudal del río Q (m³/s)",1,200,1,40],Qd:["Caudal de diseño Qd (m³/s)",10,200,1,40],H:["Salto neto H (m)",10,500,1,120],et:["Rend. máx. turbina",.8,.95,.01,.9],
@@ -256,5 +256,67 @@ const fp2=formulaPanel;formulaPanel=m=>{let h=fp2(m);if(tab==='mot'&&['sync','dc
  a=h.indexOf('<div class="formula-item"'),b=h.indexOf('</div><p class="eq">Las sust');
  if(a>0&&b>a)h=h.slice(0,a)+it.map(x=>`<div class="formula-item"><b>${x[0]}</b><div class="formula-eq">${x[1]}</div><div class="formula-sub">${x[2]}</div></div>`).join('')+h.slice(b);
  h=h.replace('Motor de inducción · ecuaciones aplicadas',e==='sync'?'Motor síncrono · ecuaciones aplicadas':'Motor de corriente continua · ecuaciones aplicadas')}return h};
+
+/* ===== v7: simulación cronológica mensual (720 intervalos horarios) ===== */
+TABS.push(["sim","📅 Simulación temporal",[]]);
+const simCfg={days:30,qmean:40,qdesign:40,head:120,qeco:2,etaT:.90,etaG:.97,demand:25,industrial:45,scenario:"variable"};
+let simRows=[],simReady=false;
+function simNum(id){const x=document.getElementById(id);return x?Number(x.value):simCfg[id]}
+function simProfile(){
+ const c={...simCfg};
+ for(const k of ['days','qmean','qdesign','head','qeco','etaT','etaG','demand','industrial']) c[k]=simNum(k);
+ c.scenario=document.getElementById('scenario')?.value||simCfg.scenario;
+ const rows=[];
+ for(let h=0;h<c.days*24;h++){
+  const day=Math.floor(h/24)+1,hr=h%24;
+  const season=Math.sin(2*Math.PI*(day-4)/30),dailyQ=Math.sin(2*Math.PI*(hr+3)/24);
+  let qFactor=1+.20*season+.055*dailyQ;
+  if(c.scenario==='sequia')qFactor*=.68;
+  if(c.scenario==='avenida')qFactor*=1.28;
+  if(c.scenario==='estable')qFactor=1;
+  const qRiver=Math.max(0,c.qmean*qFactor),qAvail=Math.max(0,qRiver-c.qeco),qTur=Math.min(qAvail,c.qdesign);
+  const load=qTur/Math.max(c.qdesign,.001),etaT=qTur>0?Math.max(.55,Math.min(c.etaT,c.etaT*(.78+.22*Math.min(1,load)))):0;
+  const pGross=.00981*qTur*c.head*etaT*c.etaG;
+  const lossTrafo=pGross*.012,lossLine=pGross*.008,aux=pGross*.005;
+  const hourShape=.78+.12*Math.sin(2*Math.PI*(hr-7)/24)+.08*Math.sin(4*Math.PI*(hr-18)/24);
+  const weekday=(day%7===0||day%7===6)?-.06:0;
+  const industrialFactor=.72+.28*(c.industrial/100);
+  const demand=Math.max(0,c.demand*hourShape*industrialFactor*(1+weekday));
+  const net=Math.max(0,pGross-lossTrafo-lossLine-aux),served=Math.min(net,demand),surplus=Math.max(0,net-demand),deficit=Math.max(0,demand-net);
+  rows.push({hour:h+1,day,hr,qRiver,qTur,qSpill:qAvail-qTur,pGross,lossTrafo,lossLine,aux,net,demand,served,surplus,deficit,etaT});
+ }
+ simRows=rows;simReady=true;return rows;
+}
+const simF=(x,n=2)=>Number(x).toLocaleString('es-PE',{minimumFractionDigits:n,maximumFractionDigits:n});
+function simPath(vals,min,max,x0=48,y0=22,w=760,h=190){return vals.map((v,i)=>`${i?'L':'M'}${(x0+i*w/Math.max(1,vals.length-1)).toFixed(1)},${(y0+h-(v-min)/(max-min||1)*h).toFixed(1)}`).join(' ')}
+function simPanel(){
+ if(!simReady)simProfile();
+ const r=simRows, sum=k=>r.reduce((a,x)=>a+x[k],0), avg=k=>sum(k)/r.length;
+ const E=k=>sum(k), maxY=Math.max(...r.map(x=>Math.max(x.net,x.demand)))*1.12||1;
+ const daily=Array.from({length:simCfg.days},(_,i)=>{const a=r.slice(i*24,(i+1)*24),s=k=>a.reduce((z,x)=>z+x[k],0);return{day:i+1,g:s('pGross')/24,n:s('net')/24,d:s('demand')/24,eg:s('pGross'),en:s('net'),ed:s('demand'),def:s('deficit')}});
+ const maxDaily=Math.max(1,...daily.map(x=>Math.max(x.g,x.d)))*1.12;
+ const dayPath=k=>simPath(daily.map(x=>x[k]),0,maxDaily,48,18,760,150);
+ const energyNet=E('net'),energyDem=E('demand'),energyServ=E('served'),energyDef=E('deficit'),energySur=E('surplus');
+ return `<div class="card"><h2>Simulación de operación · 30 días</h2><p>Modelo cronológico horario: ${r.length} intervalos de una hora. Los perfiles son sintéticos y editables; no representan datos medidos de una central.</p>
+ <div class="family-grid">
+ <label>Escenario hidrológico<select id="scenario" onchange="simCfg.scenario=this.value;simReady=false;draw()"><option value="variable" ${simCfg.scenario==='variable'?'selected':''}>Variable (estacional + diaria)</option><option value="estable" ${simCfg.scenario==='estable'?'selected':''}>Caudal estable</option><option value="sequia" ${simCfg.scenario==='sequia'?'selected':''}>Sequía (−32 %)</option><option value="avenida" ${simCfg.scenario==='avenida'?'selected':''}>Avenida (+28 %)</option></select></label>
+ ${[['days','Días simulados',1,30,1],['qmean','Caudal medio del río (m³/s)',1,200,1],['qdesign','Caudal de diseño turbina (m³/s)',1,200,1],['head','Salto neto (m)',5,500,1],['qeco','Caudal ecológico (m³/s)',0,100,.5],['etaT','Rendimiento turbina',.5,.95,.01],['etaG','Rendimiento generador',.8,.995,.005],['demand','Demanda media base (MW)',.1,300,.5],['industrial','Participación industrial (%)',0,100,5]].map(([id,label,min,max,step])=>`<label>${label}<input id="${id}" type="number" min="${min}" max="${max}" step="${step}" value="${simCfg[id]}" onchange="simCfg.${id}=Number(this.value);simReady=false"></label>`).join('')}
+ </div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button onclick="simRun()">▶ Ejecutar simulación</button><button onclick="simCSV()">⬇ Exportar 720 registros CSV</button><button onclick="simReset()">Restablecer escenario</button></div>
+ <p class="selector-note">Sin embalse en esta etapa: el caudal turbinado no supera el caudal disponible (río menos caudal ecológico) ni el caudal de diseño. El excedente se registra como agua no turbinada; no se almacena.</p></div>
+ <div class="g">
+ ${[['Energía bruta',E('pGross'),'MWh'],['Energía neta disponible',energyNet,'MWh'],['Pérdidas en transformador',E('lossTrafo'),'MWh'],['Pérdidas en línea',E('lossLine'),'MWh'],['Autoconsumo auxiliar',E('aux'),'MWh'],['Demanda total',energyDem,'MWh'],['Demanda atendida',energyServ,'MWh'],['Déficit energético',energyDef,'MWh']].map(([t,vv,u])=>`<div class="card"><small>${t}</small><div style="font-size:20px;font-weight:700;color:var(--ac)">${simF(vv,1)} ${u}</div></div>`).join('')}
+ </div>
+ <div class="card"><h2>Potencia media diaria · generación y demanda</h2><div class="sc"><svg viewBox="0 0 830 205" role="img" aria-label="Gráfico de potencia media diaria"><line x1="48" y1="168" x2="808" y2="168" stroke="var(--bd)"/><line x1="48" y1="18" x2="48" y2="168" stroke="var(--bd)"/><path d="${dayPath('n')}" fill="none" stroke="#16865b" stroke-width="2.5"/><path d="${dayPath('d')}" fill="none" stroke="#d97706" stroke-width="2.5"/><path d="${dayPath('g')}" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="5 4"/><text x="50" y="12" font-size="10" fill="var(--mu)">MW</text><text x="48" y="188" font-size="10" fill="var(--mu)">Día 1</text><text x="770" y="188" font-size="10" fill="var(--mu)">Día ${simCfg.days}</text></svg></div><p class="selector-note"><span style="color:#2563eb">— Generación bruta</span> · <span style="color:#16865b">— Generación neta</span> · <span style="color:#d97706">— Demanda</span></p></div>
+ <div class="card"><h2>Balance mensual de agua</h2><div class="instrument-readings"><div><b>${simF(avg('qRiver'),2)} m³/s</b><small>Caudal medio río</small></div><div><b>${simF(avg('qTur'),2)} m³/s</b><small>Caudal medio turbinado</small></div><div><b>${simF(avg('qSpill'),2)} m³/s</b><small>Caudal medio no turbinado</small></div><div><b>${simF(avg('etaT')*100,1)} %</b><small>Rendimiento turbina medio</small></div></div><p class="eq">Q disponible = max(Q río − Q ecológico, 0) · Q turbina = min(Q disponible, Q diseño)</p></div>
+ <div class="card"><h2>Resumen diario</h2><div class="sc"><table><thead><tr><th>Día</th><th>Generación bruta (MWh)</th><th>Neta (MWh)</th><th>Demanda (MWh)</th><th>Déficit (MWh)</th></tr></thead><tbody>${daily.map(x=>`<tr><td>${x.day}</td><td>${simF(x.eg,1)}</td><td>${simF(x.en,1)}</td><td>${simF(x.ed,1)}</td><td>${simF(x.def,1)}</td></tr>`).join('')}</tbody></table></div></div>
+ <div class="card"><h2>Balance de energía</h2><p class="eq">E neta = E bruta − E pérdidas en transformador − E pérdidas en línea − E auxiliares</p><p class="eq">E demanda atendida = min(E neta disponible, E demanda) por intervalo horario</p><div class="instrument-readings"><div><b>${simF(energySur,1)} MWh</b><small>Excedente de energía</small></div><div><b>${simF(energyDef,1)} MWh</b><small>Demanda no atendida</small></div><div><b>${simF(energyServ/Math.max(energyDem,1)*100,1)} %</b><small>Cobertura energética</small></div></div><p class="selector-note">Las energías se calculan sumando potencia media de cada intervalo × 1 hora. No se considera batería, red externa, embalse ni despacho económico.</p></div>`;
+}
+function simRun(){simProfile();draw()}
+function simReset(){Object.assign(simCfg,{days:30,qmean:v.Q,qdesign:v.Qd,head:v.H,qeco:2,etaT:v.et,etaG:v.eg,demand:25,industrial:45,scenario:'variable'});simReady=false;draw()}
+function simCSV(){if(!simReady)simProfile();const cols=['hour','day','hr','qRiver','qTur','qSpill','pGross','lossTrafo','lossLine','aux','net','demand','served','surplus','deficit','etaT'];const lines=[cols.join(';'),...simRows.map(x=>cols.map(k=>String(x[k]).replace('.',',')).join(';'))];const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='simulacion_hidroelectrica_30_dias.csv';a.click();URL.revokeObjectURL(url)}
+R.sim=()=>simPanel();
+const drawV6=draw;draw=function(){if(tab==='sim'){document.getElementById('ctl').innerHTML='<div class="card"><h2>Modo temporal</h2><p>Configura el escenario en el panel principal y ejecuta el cálculo.</p><p class="eq">Resolución: 1 hora<br>Horizonte: hasta 30 días<br>Registros: 720 máximo</p></div>';document.getElementById('view').innerHTML=R.sim();return;}drawV6()};
+const goV6=go;go=function(t){goV6(t);if(t==='sim'){simReady=false;draw()}};
+
 go("gen");
 </script></body></html>
